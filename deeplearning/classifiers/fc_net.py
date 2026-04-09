@@ -45,7 +45,11 @@ class TwoLayerNet(object):
         # weights and biases using the keys 'W1' and 'b1' and second layer weights #
         # and biases using the keys 'W2' and 'b2'.                                 #
         ############################################################################
-        pass
+        # Initialize the weights
+        self.params["W1"] = np.random.normal(loc=0, scale=weight_scale, size=(input_dim,hidden_dim))
+        self.params["W2"] = np.random.normal(loc=0, scale=weight_scale, size=(hidden_dim,hidden_dim))
+        self.params["b1"] = np.zeros(hidden_dim)
+        self.params["b2"] = np.zeros(hidden_dim)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -74,7 +78,11 @@ class TwoLayerNet(object):
         # TODO: Implement the forward pass for the two-layer net, computing the    #
         # class scores for X and storing them in the scores variable.              #
         ############################################################################
-        pass
+        
+        ## Forward Pass (Testing)
+        out, cache1    = fc_relu_forward(X  , self.params["W1"], self.params["b1"])  # Hidden Layer 1
+        scores, cache2 = fc_relu_forward(out, self.params["W2"], self.params["b2"])  # Hidden Layer 2
+
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -95,7 +103,19 @@ class TwoLayerNet(object):
         # automated tests, make sure that your L2 regularization includes a factor #
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
-        pass
+        loss, dout = softmax_loss(scores, y)  
+        W_all      = np.concatenate([self.params["W1"].flatten(), self.params["W2"].flatten()]).flatten()
+        l2_reg     = np.sum(W_all * W_all)
+        loss      += 0.5*l2_reg*self.reg
+
+        dout, dw, db = fc_relu_backward(dout, cache2)
+        dw          += self.reg * self.params["W2"] # Gradient of Regularization term WRT W2
+        grads["W2"]  = dw
+        grads["b2"]  = db
+        dout, dw, db = fc_relu_backward(dout, cache1)
+        dw          += self.reg * self.params["W1"] # Gradient of Regularization term WRT W1
+        grads["W1"]  = dw
+        grads["b1"]  = db
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -161,7 +181,16 @@ class FullyConnectedNet(object):
         # beta2, etc. Scale parameters should be initialized to one and shift      #
         # parameters should be initialized to zero.                                #
         ############################################################################
-        pass
+        dim0 = input_dim
+        for i in range(len(hidden_dims)):
+          dim = hidden_dims[i]
+          self.params[f"W{i}"] = np.random.normal(loc=0, scale=weight_scale, size=(dim0,dim))
+          self.params[f"b{i}"] = np.zeros(dim)
+          dim0 = dim
+        dim  = hidden_dims[-1]
+        dim0 = dim
+        self.params[f"W{self.num_layers-1}"] = np.random.normal(loc=0, scale=weight_scale, size=(dim0,dim))
+        self.params[f"b{self.num_layers-1}"] = np.zeros(dim)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -218,7 +247,18 @@ class FullyConnectedNet(object):
         # self.bn_params[1] to the forward pass for the second batch normalization #
         # layer, etc.                                                              #
         ############################################################################
-        pass
+        scores = X
+        cache  = [None] * self.num_layers
+        for i in range(self.num_layers):
+          if(i < (self.num_layers - 1)):
+            scores, cache[i] = fc_relu_forward(scores,
+                                               self.params[f"W{i}"], 
+                                               self.params[f"b{i}"])  # Hidden Layer i
+          else:
+            scores, cache[i] = fc_forward(scores,
+                                          self.params[f"W{i}"],
+                                          self.params[f"b{i}"])  # Last FC Layer Without Relu
+
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -242,7 +282,24 @@ class FullyConnectedNet(object):
         # automated tests, make sure that your L2 regularization includes a factor #
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
-        pass
+        loss, dout = softmax_loss(scores, y)  
+        W_all      = np.concatenate([v.flatten() for k, v in self.params.items() if k.startswith("W")])
+        l2_reg     = np.sum(W_all * W_all)
+        loss      += 0.5*l2_reg*self.reg
+
+
+        for i in range(self.num_layers):
+          
+          layer          = self.num_layers - i - 1
+          if(i==0):
+            dout, dw, db = fc_backward(dout, cache[layer])
+          else:
+            dout, dw, db = fc_relu_backward(dout, cache[layer])
+
+          dw            += self.reg * self.params[f"W{layer}"] # Gradient of Regularization term WRT Wi
+          grads[f"W{layer}"] = dw
+          grads[f"b{layer}"] = db
+
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################

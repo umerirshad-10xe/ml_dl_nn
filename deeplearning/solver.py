@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 from deeplearning import optim
 
@@ -160,6 +161,7 @@ class Solver(object):
         y_batch = self.y_train[batch_mask]
 
         # Compute loss and gradient
+
         loss, grads = self.model.loss(X_batch, y_batch)
         self.loss_history.append(loss)
 
@@ -172,6 +174,9 @@ class Solver(object):
             self.optim_configs[p] = next_config
 
     def record_histories_as_npz(self, filename):
+
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
         tl_hist = np.array(self.loss_history)
         ta_hist = np.array(self.train_acc_history)
         va_hist = np.array(self.val_acc_history)
