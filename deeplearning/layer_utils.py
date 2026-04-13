@@ -17,6 +17,7 @@ def fc_relu_forward(x, w, b):
     a, fc_cache = fc_forward(x, w, b)
     out, relu_cache = relu_forward(a)
     cache = (fc_cache, relu_cache)
+
     return out, cache
 
 

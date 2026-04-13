@@ -4,6 +4,37 @@ from deeplearning.layers import *
 from deeplearning.layer_utils import *
 
 
+def fc_relu_bn_forward(x, w, b, gamma, beta, bn_param):
+    """
+    Convenience layer that perorms an fc transform followed by a BN and a ReLU
+
+    Inputs:
+    - x: Input to the fc layer
+    - w, b: Weights for the fc layer
+
+    Returns a tuple of:
+    - out: Output from the ReLU
+    - cache: Object to give to the backward pass
+    """
+
+    a, fc_cache     = fc_forward(x, w, b)
+    b, bn_cache     = batchnorm_forward(a, gamma, beta, bn_param)
+    out, relu_cache = relu_forward(b)
+    cache = (fc_cache, relu_cache, bn_cache)
+    return out, cache
+
+
+def fc_relu_bn_backward(dout, cache):
+    """
+    Backward pass for the fc-bn-relu convenience layer
+    """
+    fc_cache, relu_cache, bn_cache = cache
+    d1 = relu_backward(dout, relu_cache)
+    d2, dgamma, dbeta = batchnorm_backward(d1, bn_cache) 
+    dx, dw, db = fc_backward(d2, fc_cache)
+    return dx, dw, db, dgamma, dbeta
+
+
 class TwoLayerNet(object):
     """
     A two-layer fully-connected neural network with ReLU nonlinearity and
@@ -182,15 +213,20 @@ class FullyConnectedNet(object):
         # parameters should be initialized to zero.                                #
         ############################################################################
         dim0 = input_dim
-        for i in range(len(hidden_dims)):
-          dim = hidden_dims[i]
+        for i in range(1, len(hidden_dims)+1):
+          dim = hidden_dims[i-1]
           self.params[f"W{i}"] = np.random.normal(loc=0, scale=weight_scale, size=(dim0,dim))
           self.params[f"b{i}"] = np.zeros(dim)
           dim0 = dim
+
+          if(self.use_batchnorm):
+            self.params[f"gamma{i}"] = np.ones(dim)   # ← initialize to 1
+            self.params[f"beta{i}"]  = np.zeros(dim)  # ← initialize to 0
+
         dim  = hidden_dims[-1]
         dim0 = dim
-        self.params[f"W{self.num_layers-1}"] = np.random.normal(loc=0, scale=weight_scale, size=(dim0,dim))
-        self.params[f"b{self.num_layers-1}"] = np.zeros(dim)
+        self.params[f"W{self.num_layers}"] = np.random.normal(loc=0, scale=weight_scale, size=(dim0,num_classes))
+        self.params[f"b{self.num_layers}"] = np.zeros(num_classes)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -215,7 +251,7 @@ class FullyConnectedNet(object):
 
         # Cast all parameters to the correct datatype
         for k, v in self.params.items():
-            self.params[k] = v.astype(dtype)
+            self.params[k] = v.astype(dtype)        
 
     def loss(self, X, y=None):
         """
@@ -232,7 +268,7 @@ class FullyConnectedNet(object):
             self.dropout_param['mode'] = mode
         if self.use_batchnorm:
             for bn_param in self.bn_params:
-                bn_param[mode] = mode
+                bn_param['mode'] = mode
 
         scores = None
         ############################################################################
@@ -249,13 +285,25 @@ class FullyConnectedNet(object):
         ############################################################################
         scores = X
         cache  = [None] * self.num_layers
-        for i in range(self.num_layers):
-          if(i < (self.num_layers - 1)):
-            scores, cache[i] = fc_relu_forward(scores,
+        do_cache = [None] * self.num_layers
+        for i in range(1, self.num_layers + 1):
+          if(i < (self.num_layers)):
+            if(self.use_batchnorm):
+              scores, cache[i-1] = fc_relu_bn_forward(scores,
+                                                    self.params[f"W{i}"], 
+                                                    self.params[f"b{i}"], 
+                                                    self.params[f"gamma{i}"], 
+                                                    self.params[f"beta{i}"],
+                                                    self.bn_params[i-1])   # Hidden Layer i With Batch Normalization
+            else:
+              scores, cache[i-1] = fc_relu_forward(scores,
                                                self.params[f"W{i}"], 
                                                self.params[f"b{i}"])  # Hidden Layer i
+            if(self.use_dropout):
+              scores, do_cache[i-1] = dropout_forward(scores, self.dropout_param)
+            
           else:
-            scores, cache[i] = fc_forward(scores,
+            scores, cache[i-1] = fc_forward(scores,
                                           self.params[f"W{i}"],
                                           self.params[f"b{i}"])  # Last FC Layer Without Relu
 
@@ -287,16 +335,26 @@ class FullyConnectedNet(object):
         l2_reg     = np.sum(W_all * W_all)
         loss      += 0.5*l2_reg*self.reg
 
-
-        for i in range(self.num_layers):
+        dw, db, dgamma, dbeta = None, None, None, None
+        for i in range(1, (self.num_layers + 1)):
           
-          layer          = self.num_layers - i - 1
-          if(i==0):
-            dout, dw, db = fc_backward(dout, cache[layer])
+          layer          = self.num_layers - i + 1
+          if(i==1):
+            dout, dw, db = fc_backward(dout, cache[layer-1])
           else:
-            dout, dw, db = fc_relu_backward(dout, cache[layer])
 
-          dw            += self.reg * self.params[f"W{layer}"] # Gradient of Regularization term WRT Wi
+            if(self.use_dropout):
+              dout = dropout_backward(dout, do_cache[layer-1])
+
+            if(self.use_batchnorm):
+              dout, dw, db, dgamma, dbeta = fc_relu_bn_backward(dout, cache[layer-1])
+
+              grads[f"gamma{layer}"] = dgamma
+              grads[f"beta{layer}"]  = dbeta
+            else:
+              dout, dw, db = fc_relu_backward(dout, cache[layer-1])
+
+          dw += self.reg * self.params[f"W{layer}"] # Gradient of Regularization term WRT Wi
           grads[f"W{layer}"] = dw
           grads[f"b{layer}"] = db
 
