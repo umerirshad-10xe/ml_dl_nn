@@ -72,7 +72,7 @@ normalization, and use it to train deep fully-connected networks.
 The IPython notebook `Dropout.ipynb` will help you implement Dropout and explore
 its effects on model generalization.
 
-### Q5: Train a model on CIFAR10 using Pytorch! (10 points)
+### Q5: Train a model on CIFAR10 using Pytorch! (10 points) 
 Now that you've implemented and gained an understanding for many key components 
 of a basic deep learning library, it is time to move on to a modern deep learning
 library: Pytorch. Here, we will walk you through the key concepts of PyTorch, and
